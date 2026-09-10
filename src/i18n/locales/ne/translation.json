@@ -167,6 +167,10 @@
         "none": "कुनै सर्टकट सेट गरिएको छैन",
         "notFound": "सर्टकट भेटिएन",
         "pressKeys": "किहरू थिच्नुहोस्...",
+        "external": {
+          "managedBy": "Managed by Omarchy",
+          "description": "Global shortcuts are managed by Hyprland on Wayland. Edit the file shown below to choose your shortcut."
+        },
         "bindings": {
           "transcribe": {
             "name": "ट्रान्सक्राइब सर्टकट",

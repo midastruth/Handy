@@ -1,6 +1,7 @@
 pub mod audio;
 pub mod history;
 pub mod models;
+pub mod omarchy;
 pub mod transcription;
 
 use crate::settings::{
@@ -172,6 +173,13 @@ pub fn initialize_enigo(app: AppHandle) -> Result<(), String> {
 /// Marker state to track if shortcuts have been initialized.
 pub struct ShortcutsInitialized;
 
+/// Whether the desktop environment, rather than Handy, owns global shortcuts.
+#[specta::specta]
+#[tauri::command]
+pub fn uses_external_shortcuts() -> bool {
+    crate::env_flag_enabled("HANDY_EXTERNAL_SHORTCUTS")
+}
+
 /// Initialize keyboard shortcuts.
 /// On macOS, this should be called after accessibility permissions are granted.
 /// This is idempotent - calling it multiple times is safe.
@@ -181,6 +189,14 @@ pub fn initialize_shortcuts(app: AppHandle) -> Result<(), String> {
     // Check if already initialized
     if app.try_state::<ShortcutsInitialized>().is_some() {
         log::debug!("Shortcuts already initialized");
+        return Ok(());
+    }
+
+    // Omarchy/Wayland can delegate global shortcuts to Hyprland while Handy
+    // continues to accept its external signal and CLI controls.
+    if crate::env_flag_enabled("HANDY_EXTERNAL_SHORTCUTS") {
+        app.manage(ShortcutsInitialized);
+        log::info!("Internal shortcuts disabled; using desktop-managed shortcuts");
         return Ok(());
     }
 

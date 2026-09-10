@@ -167,6 +167,10 @@
         "none": "Nenhum atalho configurado",
         "notFound": "Atalho não encontrado",
         "pressKeys": "Pressione as teclas...",
+        "external": {
+          "managedBy": "Managed by Omarchy",
+          "description": "Global shortcuts are managed by Hyprland on Wayland. Edit the file shown below to choose your shortcut."
+        },
         "bindings": {
           "transcribe": {
             "name": "Atalho de Transcrição",

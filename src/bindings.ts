@@ -568,6 +568,13 @@ async getLogDirPath() : Promise<Result<string, string>> {
     else return { status: "error", error: e  as any };
 }
 },
+/**
+ * Read the active Omarchy palette when Handy is running on an Omarchy desktop.
+ * Other platforms return `None`, preserving Handy's regular theme support.
+ */
+async getOmarchyTheme() : Promise<OmarchyTheme | null> {
+    return await TAURI_INVOKE("get_omarchy_theme");
+},
 async setLogLevel(level: LogLevel) : Promise<Result<null, string>> {
     try {
     return { status: "ok", data: await TAURI_INVOKE("set_log_level", { level }) };
@@ -631,6 +638,12 @@ async initializeShortcuts() : Promise<Result<null, string>> {
     if(e instanceof Error) throw e;
     else return { status: "error", error: e  as any };
 }
+},
+/**
+ * Whether the desktop environment, rather than Handy, owns global shortcuts.
+ */
+async usesExternalShortcuts() : Promise<boolean> {
+    return await TAURI_INVOKE("uses_external_shortcuts");
 },
 async getAvailableModels() : Promise<Result<ModelInfo[], string>> {
     try {
@@ -908,10 +921,8 @@ async updateRecordingRetentionPeriod(period: string) : Promise<Result<null, stri
 }
 },
 /**
- * Checks if the Mac is a laptop by detecting battery presence
- * 
- * This uses pmset to check for battery information.
- * Returns true if a battery is detected (laptop), false otherwise (desktop)
+ * Stub implementation for non-macOS platforms
+ * Always returns false since laptop detection is macOS-specific
  */
 async isLaptop() : Promise<Result<boolean, string>> {
     try {
@@ -1064,6 +1075,10 @@ sha256: string | null } } |
  */
 "Local"
 export type ModelUnloadTimeout = "never" | "immediately" | "min_2" | "min_5" | "min_10" | "min_15" | "hour_1" | "sec_15"
+/**
+ * The small, stable subset of Omarchy's `colors.toml` used by the UI.
+ */
+export type OmarchyTheme = { name: string; mode: string; accent: string; selection: string; muted: string; background: string; dark_background: string; darker_background: string; lighter_background: string; foreground: string; dark_foreground: string; light_foreground: string; red: string; yellow: string }
 export type OrtAcceleratorSetting = "auto" | "cpu" | "cuda" | "directml" | "rocm"
 export type OverlayPosition = "top" | "bottom"
 /**

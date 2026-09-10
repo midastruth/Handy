@@ -187,6 +187,10 @@
         "none": "未配置快捷键",
         "notFound": "未找到快捷键",
         "pressKeys": "请按键...",
+        "external": {
+          "managedBy": "由 Omarchy 管理",
+          "description": "Wayland 全局快捷键由 Hyprland 管理。请编辑下方显示的文件来自定义快捷键。"
+        },
         "bindings": {
           "transcribe": {
             "name": "转录快捷键",
