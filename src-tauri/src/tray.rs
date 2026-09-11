@@ -25,14 +25,21 @@ use crate::managers::model::ModelManager;
 use crate::managers::transcription::TranscriptionManager;
 use crate::settings;
 use crate::tray_i18n::get_tray_translations;
-use log::{debug, error, info, trace, warn};
+#[cfg(not(target_os = "linux"))]
+use log::debug;
+use log::{error, info, trace, warn};
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex, MutexGuard};
+#[cfg(not(target_os = "linux"))]
 use std::time::Instant;
 use tauri::image::Image;
+#[cfg(not(target_os = "linux"))]
 use tauri::menu::{CheckMenuItem, Menu, MenuItem, PredefinedMenuItem, Submenu};
+#[cfg(not(target_os = "linux"))]
 use tauri::tray::TrayIcon;
+#[cfg(target_os = "linux")]
+use tauri::Emitter;
 use tauri::{AppHandle, Manager, Theme};
 use tauri_plugin_clipboard_manager::ClipboardExt;
 
@@ -123,6 +130,216 @@ impl TrayState {
 impl Default for TrayState {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+/// Linux uses a native StatusNotifierItem rather than Tauri's
+/// libappindicator tray. libappindicator marks the icon as menu-only and does
+/// not expose activation events; StatusNotifierItem lets the desktop send an
+/// `Activate` request for a normal left click.
+#[cfg(target_os = "linux")]
+struct LinuxTray {
+    app: AppHandle,
+    desired: TrayDesired,
+    icon: ksni::Icon,
+    visible: bool,
+}
+
+#[cfg(target_os = "linux")]
+impl LinuxTray {
+    fn menu_item(
+        label: String,
+        enabled: bool,
+        activate: impl Fn(&mut Self) + Send + 'static,
+    ) -> ksni::MenuItem<Self> {
+        ksni::menu::StandardItem {
+            label,
+            enabled,
+            activate: Box::new(activate),
+            ..Default::default()
+        }
+        .into()
+    }
+
+    fn switch_model(&self, model_id: String) {
+        if model_id == settings::get_settings(&self.app).selected_model {
+            return;
+        }
+        let app = self.app.clone();
+        std::thread::spawn(move || {
+            match crate::commands::models::switch_active_model(&app, &model_id) {
+                Ok(()) => info!("Model switched to {} via tray.", model_id),
+                Err(err) => error!("Failed to switch model via tray: {err}"),
+            }
+            update_tray_menu(&app);
+        });
+    }
+}
+
+#[cfg(target_os = "linux")]
+impl ksni::Tray for LinuxTray {
+    fn id(&self) -> String {
+        "handy".into()
+    }
+
+    fn title(&self) -> String {
+        version_label()
+    }
+
+    fn status(&self) -> ksni::Status {
+        if self.visible {
+            ksni::Status::Active
+        } else {
+            ksni::Status::Passive
+        }
+    }
+
+    fn icon_pixmap(&self) -> Vec<ksni::Icon> {
+        vec![self.icon.clone()]
+    }
+
+    fn tool_tip(&self) -> ksni::ToolTip {
+        ksni::ToolTip {
+            title: version_label(),
+            ..Default::default()
+        }
+    }
+
+    fn activate(&mut self, _x: i32, _y: i32) {
+        crate::show_main_window(&self.app);
+    }
+
+    fn menu(&self) -> Vec<ksni::MenuItem<Self>> {
+        use ksni::menu::{CheckmarkItem, SubMenu};
+
+        let strings = get_tray_translations(Some(self.desired.menu.locale.clone()));
+        let mut menu = vec![Self::menu_item(version_label(), false, |_| {})];
+        menu.push(ksni::MenuItem::Separator);
+
+        if self.desired.menu.busy {
+            menu.push(Self::menu_item(strings.cancel.clone(), true, |tray| {
+                crate::utils::cancel_current_operation(&tray.app);
+            }));
+            menu.push(ksni::MenuItem::Separator);
+        }
+
+        menu.push(Self::menu_item(
+            strings.copy_last_transcript.clone(),
+            true,
+            |tray| copy_last_transcript(&tray.app),
+        ));
+        menu.push(ksni::MenuItem::Separator);
+
+        if !self.desired.menu.busy {
+            let submenu_label = self
+                .desired
+                .menu
+                .downloaded_models
+                .iter()
+                .find(|(id, _)| *id == self.desired.menu.selected_model)
+                .map(|(_, name)| name.clone())
+                .unwrap_or_else(|| strings.model.clone());
+            let model_items = self
+                .desired
+                .menu
+                .downloaded_models
+                .iter()
+                .map(|(id, name)| {
+                    let model_id = id.clone();
+                    CheckmarkItem {
+                        label: name.clone(),
+                        checked: *id == self.desired.menu.selected_model,
+                        activate: Box::new(move |tray: &mut Self| {
+                            tray.switch_model(model_id.clone());
+                        }),
+                        ..Default::default()
+                    }
+                    .into()
+                })
+                .collect();
+            menu.push(
+                SubMenu {
+                    label: submenu_label,
+                    submenu: model_items,
+                    ..Default::default()
+                }
+                .into(),
+            );
+            menu.push(Self::menu_item(
+                strings.unload_model.clone(),
+                self.desired.menu.model_loaded,
+                |tray| {
+                    let manager = tray.app.state::<Arc<TranscriptionManager>>();
+                    match manager.unload_model() {
+                        Ok(()) => info!("Model unloaded via tray."),
+                        Err(err) => error!("Failed to unload model via tray: {err}"),
+                    }
+                },
+            ));
+            menu.push(ksni::MenuItem::Separator);
+        }
+
+        menu.push(Self::menu_item(strings.settings.clone(), true, |tray| {
+            crate::show_main_window(&tray.app);
+        }));
+        if !settings::update_checks_forced_disabled() {
+            menu.push(Self::menu_item(
+                strings.check_updates.clone(),
+                self.desired.menu.update_checks_enabled,
+                |tray| {
+                    let current = settings::get_settings(&tray.app);
+                    if settings::update_checks_effectively_enabled(&current) {
+                        crate::show_main_window(&tray.app);
+                        let _ = tray.app.emit("check-for-updates", ());
+                    }
+                },
+            ));
+        }
+        menu.push(ksni::MenuItem::Separator);
+        menu.push(Self::menu_item(strings.quit.clone(), true, |tray| {
+            tray.app.exit(0);
+        }));
+        menu
+    }
+}
+
+#[cfg(target_os = "linux")]
+pub struct LinuxTrayHandle(ksni::blocking::Handle<LinuxTray>);
+
+#[cfg(target_os = "linux")]
+impl LinuxTrayHandle {
+    pub fn new(app: &AppHandle) -> Result<Self, String> {
+        use ksni::blocking::TrayMethods;
+
+        let desired = compute_desired(app, TrayIconState::Idle);
+        let image = load_tray_icon(
+            app.path()
+                .resolve(desired.icon_path, tauri::path::BaseDirectory::Resource),
+        )
+        .map_err(|err| err.to_string())?;
+        let tray = LinuxTray {
+            app: app.clone(),
+            desired,
+            icon: linux_icon(&image),
+            visible: true,
+        };
+        tray.assume_sni_available(true)
+            .spawn()
+            .map(Self)
+            .map_err(|err| format!("failed to register StatusNotifierItem: {err}"))
+    }
+}
+
+#[cfg(target_os = "linux")]
+fn linux_icon(image: &Image<'_>) -> ksni::Icon {
+    let mut data = image.rgba().to_vec();
+    for pixel in data.chunks_exact_mut(4) {
+        pixel.rotate_right(1); // RGBA to network-order ARGB
+    }
+    ksni::Icon {
+        width: image.width() as i32,
+        height: image.height() as i32,
+        data,
     }
 }
 
@@ -258,7 +475,11 @@ fn sync_tray_with(app: &AppHandle, update: impl FnOnce(&mut TrayInner)) {
 
     // Tray not built yet (early secure-input monitor callbacks). The intent
     // is kept and picked up by the first sync after the tray exists.
-    if app.try_state::<TrayIcon>().is_none() {
+    #[cfg(target_os = "linux")]
+    let tray_ready = app.try_state::<LinuxTrayHandle>().is_some();
+    #[cfg(not(target_os = "linux"))]
+    let tray_ready = app.try_state::<TrayIcon>().is_some();
+    if !tray_ready {
         return;
     }
 
@@ -338,6 +559,15 @@ fn compute_desired(app: &AppHandle, icon_state: TrayIconState) -> TrayDesired {
     }
 }
 
+#[cfg(target_os = "linux")]
+fn post_apply(app: &AppHandle) {
+    // A menu callback can itself trigger a tray update. Apply on a separate
+    // thread so the blocking ksni handle never waits on its own D-Bus task.
+    let app = app.clone();
+    std::thread::spawn(move || apply_linux(&app));
+}
+
+#[cfg(not(target_os = "linux"))]
 fn post_apply(app: &AppHandle) {
     let handle = app.clone();
     if let Err(err) = app.run_on_main_thread(move || apply_on_main(&handle)) {
@@ -350,7 +580,47 @@ fn post_apply(app: &AppHandle) {
     }
 }
 
+#[cfg(target_os = "linux")]
+fn apply_linux(app: &AppHandle) {
+    let Some(state) = app.try_state::<TrayState>() else {
+        return;
+    };
+    let Some(tray) = app.try_state::<LinuxTrayHandle>() else {
+        return;
+    };
+
+    let (desired, icon) = {
+        let mut inner = state.lock();
+        inner.pending = false;
+        let Some(desired) = inner.desired.clone() else {
+            return;
+        };
+        let Some(image) = inner.icons.get(desired.icon_path) else {
+            error!("Tray icon '{}' is not loaded", desired.icon_path);
+            return;
+        };
+        (desired, linux_icon(image))
+    };
+
+    if tray
+        .0
+        .update(|linux_tray| {
+            linux_tray.desired = desired.clone();
+            linux_tray.icon = icon;
+        })
+        .is_none()
+    {
+        error!("Linux status notifier stopped before tray update");
+        return;
+    }
+
+    let mut inner = state.lock();
+    inner.applied_icon = Some(desired.icon_path);
+    inner.applied_menu = Some(desired.menu);
+}
+
 /// The single writer to the native tray. Runs on the main thread.
+#[cfg(not(target_os = "linux"))]
 fn apply_on_main(app: &AppHandle) {
     let Some(state) = app.try_state::<TrayState>() else {
         return;
@@ -439,6 +709,7 @@ fn load_tray_icon(resolved_icon_path: tauri::Result<PathBuf>) -> tauri::Result<I
     Image::from_path(&resolved_icon_path).map(Image::to_owned)
 }
 
+#[cfg(not(target_os = "linux"))]
 pub fn tray_tooltip() -> String {
     version_label()
 }
@@ -455,6 +726,7 @@ fn version_label() -> String {
 /// to app state: everything it depends on is in `inputs`, plus the
 /// process-constant `HANDY_DISABLE_UPDATER` env flag behind
 /// `update_checks_forced_disabled()`, which cannot change during a run.
+#[cfg(not(target_os = "linux"))]
 fn build_menu(app: &AppHandle, inputs: &MenuInputs) -> tauri::Result<(Menu<tauri::Wry>, String)> {
     let strings = get_tray_translations(Some(inputs.locale.clone()));
 
@@ -601,6 +873,19 @@ fn last_transcript_text(entry: &HistoryEntry) -> &str {
         .unwrap_or(&entry.transcription_text)
 }
 
+#[cfg(target_os = "linux")]
+pub fn set_tray_visibility(app: &AppHandle, visible: bool) {
+    let Some(tray) = app.try_state::<LinuxTrayHandle>() else {
+        return;
+    };
+    if tray.0.update(|tray| tray.visible = visible).is_some() {
+        info!("Tray visibility set to: {visible}");
+    } else {
+        error!("Failed to set Linux tray visibility: status notifier stopped");
+    }
+}
+
+#[cfg(not(target_os = "linux"))]
 pub fn set_tray_visibility(app: &AppHandle, visible: bool) {
     let tray = app.state::<TrayIcon>();
     if let Err(e) = tray.set_visible(visible) {
@@ -668,6 +953,8 @@ pub fn copy_last_transcript(app: &AppHandle) {
 
 #[cfg(test)]
 mod tests {
+    #[cfg(target_os = "linux")]
+    use super::linux_icon;
     use super::{last_transcript_text, load_tray_icon, MenuInputs, TrayDesired, TrayIconState};
     use crate::managers::history::HistoryEntry;
 
@@ -719,6 +1006,15 @@ mod tests {
         let dir = tempfile::tempdir().expect("failed to create tempdir");
         let missing = dir.path().join("does_not_exist.png");
         assert!(load_tray_icon(Ok(missing)).is_err());
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn linux_icon_converts_rgba_to_argb() {
+        let image = tauri::image::Image::new(&[1, 2, 3, 4, 5, 6, 7, 8], 2, 1);
+        let icon = linux_icon(&image);
+        assert_eq!((icon.width, icon.height), (2, 1));
+        assert_eq!(icon.data, [4, 1, 2, 3, 8, 5, 6, 7]);
     }
 
     #[test]
