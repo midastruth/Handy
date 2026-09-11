@@ -353,15 +353,15 @@ function App() {
           <WhatsNewGate />
         </ErrorBoundary>
         {/* Main content area that takes remaining space */}
-        <div className="app-workspace flex-1 flex overflow-hidden">
+        <div className="app-workspace min-h-0 min-w-0 flex-1 flex overflow-hidden">
           <Sidebar
             activeSection={currentSection}
             onSectionChange={setCurrentSection}
           />
           {/* Scrollable content area */}
-          <div className="app-main flex-1 flex flex-col overflow-hidden">
-            <div className="flex-1 overflow-y-auto">
-              <div className="app-content flex flex-col items-center p-5 gap-5">
+          <div className="app-main min-w-0 flex-1 flex flex-col overflow-hidden">
+            <div className="min-h-0 min-w-0 flex-1 overflow-y-auto overflow-x-hidden">
+              <div className="app-content flex w-full min-w-0 flex-col items-center p-5 gap-5">
                 <AccessibilityPermissions />
                 <SecureInputWarning />
                 {renderSettingsContent(currentSection, setOnboardingPreview)}

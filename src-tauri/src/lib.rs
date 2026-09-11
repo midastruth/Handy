@@ -959,10 +959,21 @@ pub fn run(cli_args: CliArgs) {
                 tauri::WebviewWindowBuilder::new(app, "main", tauri::WebviewUrl::App("/".into()))
                     .title("Handy")
                     .inner_size(680.0, 570.0)
-                    .min_inner_size(680.0, 570.0)
                     .resizable(true)
                     .maximizable(true)
                     .visible(false);
+
+            // Tiled Wayland compositors may allocate less space than the
+            // requested minimum. Keeping a 680px WebView minimum in that case
+            // makes the page retain a wider viewport and clips its right side.
+            #[cfg(target_os = "linux")]
+            {
+                win_builder = win_builder.min_inner_size(360.0, 420.0);
+            }
+            #[cfg(not(target_os = "linux"))]
+            {
+                win_builder = win_builder.min_inner_size(680.0, 570.0);
+            }
 
             if let Some(data_dir) = portable::data_dir() {
                 win_builder = win_builder.data_directory(data_dir.join("webview"));

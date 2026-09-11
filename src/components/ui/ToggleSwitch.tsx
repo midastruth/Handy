@@ -32,6 +32,7 @@ export const ToggleSwitch: React.FC<ToggleSwitchProps> = ({
       grouped={grouped}
       disabled={disabled}
       tooltipPosition={tooltipPosition}
+      keepHorizontalOnNarrow
     >
       <label
         className={`flex items-center ${disabled || isUpdating ? "cursor-not-allowed" : "cursor-pointer"}`}

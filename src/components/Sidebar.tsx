@@ -93,11 +93,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
     .map(([id, config]) => ({ id: id as SidebarSection, ...config }));
 
   return (
-    <aside className="app-sidebar flex flex-col w-44 h-full border-e border-mid-gray/20 items-center px-3">
-      <div className="app-brand w-full py-5 px-2">
+    <aside className="app-sidebar flex h-full w-44 shrink-0 flex-col items-center border-e border-mid-gray/20 px-3">
+      <div className="app-brand w-full shrink-0 py-5 px-2">
         <HandyTextLogo width={112} />
       </div>
-      <nav className="flex flex-col w-full items-center gap-1.5 pt-3 border-t border-mid-gray/20">
+      <nav className="app-sidebar-nav flex min-h-0 w-full flex-col items-center gap-1.5 overflow-y-auto border-t border-mid-gray/20 pt-3">
         {availableSections.map((section) => {
           const Icon = section.icon;
           const isActive = activeSection === section.id;
@@ -111,10 +111,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
                   : "hover:bg-mid-gray/20 hover:opacity-100 opacity-85"
               }`}
               onClick={() => onSectionChange(section.id)}
+              title={t(section.labelKey)}
             >
               <Icon width={24} height={24} className="shrink-0" />
               <p
-                className="text-sm font-medium truncate"
+                className="app-nav-label truncate text-sm font-medium"
                 title={t(section.labelKey)}
               >
                 {t(section.labelKey)}

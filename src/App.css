@@ -267,6 +267,101 @@
   outline-offset: 2px;
 }
 
+/* Keep the settings usable in narrow tiled/floating windows. Hyprland may
+   size a tiled window below Tauri's requested minimum, so the web UI must not
+   rely on that minimum to prevent horizontal overflow. */
+@media (max-width: 760px) {
+  .app-content {
+    gap: 0.75rem;
+    padding: 0.75rem;
+  }
+
+  .app-setting-row {
+    align-items: stretch;
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+
+  .app-content > *,
+  .app-settings-group,
+  .app-settings-card,
+  .app-settings-card > div,
+  .app-setting-row {
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+  }
+
+  .app-setting-row > *,
+  .app-setting-row * {
+    max-width: 100%;
+    min-width: 0;
+  }
+
+  .app-setting-row > * {
+    width: 100%;
+  }
+
+  .app-setting-row :is(h3, p, code) {
+    max-width: 100%;
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+
+  .app-setting-row-narrow-horizontal {
+    align-items: center;
+    flex-direction: row;
+  }
+
+  .app-setting-row-narrow-horizontal > * {
+    width: auto;
+  }
+
+  .app-main [class*="min-w-["] {
+    min-width: 0 !important;
+  }
+
+  .app-main :is(input, textarea, select) {
+    max-width: 100%;
+  }
+
+  .app-setting-row code {
+    max-width: 100%;
+    overflow-wrap: anywhere;
+  }
+
+  .app-sidebar {
+    width: 4rem;
+    padding-inline: 0.5rem;
+  }
+
+  .app-brand {
+    display: none;
+  }
+
+  .app-sidebar-nav {
+    border-top: 0;
+    padding-top: 0.75rem;
+  }
+
+  .app-nav-item {
+    justify-content: center;
+    padding-inline: 0.5rem;
+  }
+
+  .app-nav-label,
+  .app-sidebar-mark {
+    display: none;
+  }
+}
+
+@media (max-width: 520px) {
+  .app-footer-content {
+    align-items: stretch;
+    flex-direction: column;
+  }
+}
+
 @layer utilities {
   .text-stroke {
     -webkit-text-stroke: 2px var(--color-text-stroke);
