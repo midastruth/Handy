@@ -93,9 +93,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
     .map(([id, config]) => ({ id: id as SidebarSection, ...config }));
 
   return (
-    <div className="flex flex-col w-40 h-full border-e border-mid-gray/20 items-center px-2">
-      <HandyTextLogo width={120} className="m-4" />
-      <div className="flex flex-col w-full items-center gap-1 pt-2 border-t border-mid-gray/20">
+    <aside className="app-sidebar flex h-full w-44 shrink-0 flex-col items-center border-e border-mid-gray/20 px-3">
+      <div className="app-brand w-full shrink-0 py-5 px-2">
+        <HandyTextLogo width={112} />
+      </div>
+      <nav className="app-sidebar-nav flex min-h-0 w-full flex-col items-center gap-1.5 overflow-y-auto border-t border-mid-gray/20 pt-3">
         {availableSections.map((section) => {
           const Icon = section.icon;
           const isActive = activeSection === section.id;
@@ -103,16 +105,17 @@ export const Sidebar: React.FC<SidebarProps> = ({
           return (
             <div
               key={section.id}
-              className={`flex gap-2 items-center p-2 w-full rounded-lg cursor-pointer transition-colors ${
+              className={`app-nav-item flex gap-2.5 items-center px-3 py-2.5 w-full rounded-lg cursor-pointer transition-colors ${
                 isActive
-                  ? "bg-logo-primary/80"
+                  ? "is-active bg-logo-primary/80"
                   : "hover:bg-mid-gray/20 hover:opacity-100 opacity-85"
               }`}
               onClick={() => onSectionChange(section.id)}
+              title={t(section.labelKey)}
             >
               <Icon width={24} height={24} className="shrink-0" />
               <p
-                className="text-sm font-medium truncate"
+                className="app-nav-label truncate text-sm font-medium"
                 title={t(section.labelKey)}
               >
                 {t(section.labelKey)}
@@ -120,7 +123,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
             </div>
           );
         })}
-      </div>
-    </div>
+      </nav>
+      <div className="app-sidebar-mark mt-auto mb-4 h-1 w-8 rounded-full bg-logo-primary/70" />
+    </aside>
   );
 };

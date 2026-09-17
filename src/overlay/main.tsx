@@ -8,6 +8,7 @@ import {
   syncThemeFromSettings,
 } from "@/lib/utils/theme";
 import type { Theme } from "@/bindings";
+import { startOmarchyThemeSync } from "@/lib/utils/omarchyTheme";
 import "@/i18n";
 
 // A separate webview from the settings window, so the overlay has to set
@@ -16,6 +17,7 @@ import "@/i18n";
 // the overlay booted first, then follow live changes.
 applyTheme(getStoredTheme());
 syncThemeFromSettings();
+startOmarchyThemeSync();
 listen<Theme>("theme-changed", (event) => applyTheme(event.payload));
 
 ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(

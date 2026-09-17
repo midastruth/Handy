@@ -187,6 +187,10 @@
         "none": "ショートカットが設定されていません",
         "notFound": "ショートカットが見つかりません",
         "pressKeys": "キーを押してください…",
+        "external": {
+          "managedBy": "Managed by Omarchy",
+          "description": "Global shortcuts are managed by Hyprland on Wayland. Edit the file shown below to choose your shortcut."
+        },
         "bindings": {
           "transcribe": {
             "name": "文字起こしのショートカット",

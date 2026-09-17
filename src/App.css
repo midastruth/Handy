@@ -40,6 +40,36 @@
      block (matching other surfaces); the dark theme overrides it below. */
   --color-log-surface: color-mix(in srgb, var(--color-background), black 6%);
 
+  /* Omarchy integration fallbacks; live values are supplied by the Tauri
+     backend when an active Omarchy palette is available. */
+  --color-omarchy-selection: color-mix(
+    in srgb,
+    var(--color-text),
+    transparent 82%
+  );
+  --color-omarchy-muted: var(--color-mid-gray);
+  --color-omarchy-surface: color-mix(
+    in srgb,
+    var(--color-background),
+    white 6%
+  );
+  --color-omarchy-sidebar: color-mix(
+    in srgb,
+    var(--color-background),
+    black 10%
+  );
+  --color-omarchy-deep: color-mix(in srgb, var(--color-background), black 20%);
+  --color-omarchy-border: color-mix(
+    in srgb,
+    var(--color-text),
+    transparent 84%
+  );
+  --color-omarchy-control: color-mix(
+    in srgb,
+    var(--color-omarchy-surface),
+    var(--color-background) 54%
+  );
+
   /* Apply colors */
   color: var(--color-text);
   background-color: var(--color-background);
@@ -91,6 +121,245 @@
 }
 ::-webkit-scrollbar-thumb:hover {
   background-color: var(--scrollbar-thumb-hover);
+}
+
+/* Omarchy desktop treatment. Inline palette properties are intentionally used
+   so `omarchy theme set` can update the app without a rebuild or restart. */
+:root[data-omarchy-theme] {
+  font-family:
+    "JetBrainsMono Nerd Font", "JetBrains Mono", ui-monospace, SFMono-Regular,
+    Consolas, monospace;
+  --scrollbar-thumb: color-mix(in srgb, var(--color-text), transparent 82%);
+  --scrollbar-thumb-hover: var(--color-logo-primary);
+  --color-log-surface: var(--color-omarchy-deep);
+}
+
+:root[data-omarchy-theme] body {
+  background: var(--color-omarchy-deep);
+}
+
+:root[data-omarchy-theme] ::selection {
+  color: var(--color-text);
+  background: var(--color-omarchy-selection);
+}
+
+:root[data-omarchy-theme] .app-shell {
+  background:
+    radial-gradient(
+      circle at 85% -15%,
+      color-mix(in srgb, var(--color-logo-primary), transparent 91%),
+      transparent 34%
+    ),
+    var(--color-background);
+}
+
+:root[data-omarchy-theme] .app-sidebar {
+  background: color-mix(in srgb, var(--color-omarchy-sidebar), transparent 4%);
+  border-color: var(--color-omarchy-surface);
+  box-shadow: 8px 0 28px rgb(0 0 0 / 12%);
+}
+
+:root[data-omarchy-theme] .app-brand {
+  opacity: 0.94;
+}
+
+:root[data-omarchy-theme] .app-nav-item {
+  color: var(--color-text);
+  border: 1px solid transparent;
+}
+
+:root[data-omarchy-theme] .app-nav-item:not(.is-active):hover {
+  background: var(--color-omarchy-surface);
+  border-color: color-mix(in srgb, var(--color-omarchy-muted), transparent 35%);
+}
+
+:root[data-omarchy-theme] .app-nav-item.is-active {
+  color: var(--color-text);
+  background: color-mix(
+    in srgb,
+    var(--color-logo-primary),
+    var(--color-omarchy-sidebar) 68%
+  );
+  border-color: color-mix(in srgb, var(--color-logo-primary), transparent 28%);
+  box-shadow: inset 3px 0 0 var(--color-logo-primary);
+}
+
+:root[data-omarchy-theme] .app-content {
+  max-width: 980px;
+  margin-inline: auto;
+}
+
+:root[data-omarchy-theme] .app-main {
+  background: transparent;
+}
+
+:root[data-omarchy-theme] .app-settings-group > div:first-child h2 {
+  color: color-mix(in srgb, var(--color-text), transparent 28%);
+  letter-spacing: 0.09em;
+}
+
+:root[data-omarchy-theme] .app-settings-group > div:first-child p {
+  color: color-mix(in srgb, var(--color-text), transparent 38%);
+}
+
+:root[data-omarchy-theme] .app-settings-card {
+  background: color-mix(
+    in srgb,
+    var(--color-background),
+    var(--color-omarchy-surface) 18%
+  );
+  border-color: var(--color-omarchy-border);
+  box-shadow: 0 10px 28px rgb(0 0 0 / 8%);
+}
+
+:root[data-omarchy-theme] .app-setting-row {
+  border-color: var(--color-omarchy-border);
+}
+
+:root[data-omarchy-theme] .app-settings-card > div {
+  border-color: var(--color-omarchy-border);
+}
+
+:root[data-omarchy-theme] .app-main [class*="border-mid-gray"] {
+  border-color: var(--color-omarchy-border);
+}
+
+:root[data-omarchy-theme] .app-main [class~="bg-mid-gray/10"] {
+  background: var(--color-omarchy-control);
+}
+
+:root[data-omarchy-theme] .app-main :is(input, textarea, select, button) {
+  border-color: var(--color-omarchy-border);
+}
+
+:root[data-omarchy-theme] .app-main :is(input, textarea)::placeholder {
+  color: color-mix(in srgb, var(--color-text), transparent 48%);
+}
+
+:root[data-omarchy-theme] .app-main :disabled {
+  opacity: 0.62;
+}
+
+:root[data-omarchy-theme] .app-shell > div:last-child {
+  background: var(--color-omarchy-sidebar);
+  border-color: var(--color-omarchy-surface);
+}
+
+:root[data-omarchy-theme] .rounded-lg {
+  border-radius: 0.45rem;
+}
+
+:root[data-omarchy-theme] .rounded-md {
+  border-radius: 0.35rem;
+}
+
+:root[data-omarchy-theme] input,
+:root[data-omarchy-theme] textarea,
+:root[data-omarchy-theme] button {
+  font: inherit;
+}
+
+:root[data-omarchy-theme] button:focus-visible,
+:root[data-omarchy-theme] [role="button"]:focus-visible,
+:root[data-omarchy-theme] input:focus-visible,
+:root[data-omarchy-theme] textarea:focus-visible {
+  outline: 1px solid var(--color-logo-primary);
+  outline-offset: 2px;
+}
+
+/* Keep the settings usable in narrow tiled/floating windows. Hyprland may
+   size a tiled window below Tauri's requested minimum, so the web UI must not
+   rely on that minimum to prevent horizontal overflow. */
+@media (max-width: 760px) {
+  .app-content {
+    gap: 0.75rem;
+    padding: 0.75rem;
+  }
+
+  .app-setting-row {
+    align-items: stretch;
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+
+  .app-content > *,
+  .app-settings-group,
+  .app-settings-card,
+  .app-settings-card > div,
+  .app-setting-row {
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+  }
+
+  .app-setting-row > *,
+  .app-setting-row * {
+    max-width: 100%;
+    min-width: 0;
+  }
+
+  .app-setting-row > * {
+    width: 100%;
+  }
+
+  .app-setting-row :is(h3, p, code) {
+    max-width: 100%;
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+
+  .app-setting-row-narrow-horizontal {
+    align-items: center;
+    flex-direction: row;
+  }
+
+  .app-setting-row-narrow-horizontal > * {
+    width: auto;
+  }
+
+  .app-main [class*="min-w-["] {
+    min-width: 0 !important;
+  }
+
+  .app-main :is(input, textarea, select) {
+    max-width: 100%;
+  }
+
+  .app-setting-row code {
+    max-width: 100%;
+    overflow-wrap: anywhere;
+  }
+
+  .app-sidebar {
+    width: 4rem;
+    padding-inline: 0.5rem;
+  }
+
+  .app-brand {
+    display: none;
+  }
+
+  .app-sidebar-nav {
+    border-top: 0;
+    padding-top: 0.75rem;
+  }
+
+  .app-nav-item {
+    justify-content: center;
+    padding-inline: 0.5rem;
+  }
+
+  .app-nav-label,
+  .app-sidebar-mark {
+    display: none;
+  }
+}
+
+@media (max-width: 520px) {
+  .app-footer-content {
+    align-items: stretch;
+    flex-direction: column;
+  }
 }
 
 @layer utilities {

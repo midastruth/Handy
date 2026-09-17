@@ -161,6 +161,10 @@ objc2-app-kit = "0.3"
 objc2-service-management = "0.3.2"
 
 [target.'cfg(target_os = "linux")'.dependencies]
+# Tauri's libappindicator backend cannot deliver icon activation events on
+# Linux. ksni exposes StatusNotifierItem::Activate so a left click can open the
+# main window while retaining a separate context menu.
+ksni = { version = "0.3.6", features = ["blocking"] }
 gtk-layer-shell = { version = "0.8", features = ["v0_6"] }
 gtk = "0.18"
 libc = "0.2"

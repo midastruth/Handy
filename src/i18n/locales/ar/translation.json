@@ -164,6 +164,10 @@
         "none": "لا توجد اختصارات مجهزة",
         "notFound": "الاختصار غير موجود",
         "pressKeys": "...اضغط على المفاتيح",
+        "external": {
+          "managedBy": "Managed by Omarchy",
+          "description": "Global shortcuts are managed by Hyprland on Wayland. Edit the file shown below to choose your shortcut."
+        },
         "bindings": {
           "transcribe": {
             "name": "اختصار التفريغ الصوتي",

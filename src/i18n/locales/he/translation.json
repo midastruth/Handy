@@ -167,6 +167,10 @@
         "none": "לא הוגדרו קיצורי מקשים",
         "notFound": "קיצור הדרך לא נמצא",
         "pressKeys": "לחץ על המקשים...",
+        "external": {
+          "managedBy": "Managed by Omarchy",
+          "description": "Global shortcuts are managed by Hyprland on Wayland. Edit the file shown below to choose your shortcut."
+        },
         "bindings": {
           "transcribe": {
             "name": "קיצור מקשים לתמלול",

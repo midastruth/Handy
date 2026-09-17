@@ -3,6 +3,7 @@ import ReactDOM from "react-dom/client";
 import { platform } from "@tauri-apps/plugin-os";
 import App from "./App";
 import { installCompatShims } from "./lib/compat";
+import { startOmarchyThemeSync } from "./lib/utils/omarchyTheme";
 import {
   applyTheme,
   getStoredTheme,
@@ -18,6 +19,7 @@ document.documentElement.dataset.platform = platform();
 // the wrong palette, then reconcile with the persisted setting once it loads.
 applyTheme(getStoredTheme());
 syncThemeFromSettings();
+startOmarchyThemeSync();
 
 // Initialize i18n
 import "./i18n";
