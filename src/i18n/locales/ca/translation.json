@@ -167,6 +167,10 @@
         "none": "No hi ha cap drecera configurada",
         "notFound": "No s'ha trobat la drecera",
         "pressKeys": "Premeu les tecles...",
+        "external": {
+          "managedBy": "Gestionat per Omarchy",
+          "description": "Les dreceres globals les gestiona Hyprland a Wayland. Editeu el fitxer que es mostra a continuació per triar la vostra drecera."
+        },
         "bindings": {
           "transcribe": {
             "name": "Drecera de transcripció",

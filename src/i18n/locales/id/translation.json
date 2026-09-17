@@ -167,6 +167,10 @@
         "none": "Belum ada pintasan yang diatur",
         "notFound": "Pintasan tidak ditemukan",
         "pressKeys": "Tekan tombol...",
+        "external": {
+          "managedBy": "Dikelola oleh Omarchy",
+          "description": "Pintasan global dikelola oleh Hyprland di Wayland. Edit file yang ditampilkan di bawah ini untuk memilih pintasan Anda."
+        },
         "bindings": {
           "transcribe": {
             "name": "Pintasan Transkripsi",
