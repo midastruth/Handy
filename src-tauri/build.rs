@@ -257,7 +257,119 @@ fn stage_transcribe_runtime_libs() {
              compute devices"
         );
     }
+    stage_cblas_compat_lib(&dest);
     println!("cargo:warning=Staged {copied} transcribe-cpp runtime library file(s)");
+}
+
+/// Make `libblas.so.3` resolve to a library that actually exports the CBLAS
+/// symbols `libtranscribe.so` imports.
+///
+/// transcribe-cpp's host decoder links the system BLAS for its sgemm host path,
+/// which lands in `libtranscribe` as `DT_NEEDED libblas.so.3` plus undefined
+/// `cblas_sgemm` / `cblas_sgemv`. On Debian/Ubuntu the `libblas.so.3` SONAME is
+/// provided by OpenBLAS, so that resolves. On Arch and Fedora the same SONAME is
+/// owned by the *reference* BLAS (`blas`), which contains no CBLAS symbols at
+/// all — the process then dies with
+///
+/// ```text
+/// symbol lookup error: libtranscribe.so.0.2: undefined symbol: cblas_sgemm
+/// ```
+///
+/// as soon as the first model load reaches the decoder. `libtranscribe`'s own
+/// `$ORIGIN` runpath is searched before the system paths, so dropping a
+/// `libblas.so.3` symlink to the system OpenBLAS next to it repairs the lookup
+/// without touching the user's alternatives setup or the rest of the system.
+///
+/// Linux-only, and a no-op when the system BLAS already provides CBLAS, when
+/// OpenBLAS is absent, or when `libtranscribe` has no CBLAS dependency at all
+/// (BLAS-off builds).
+///
+/// Gate on `CARGO_CFG_TARGET_OS` rather than `cfg(target_os)`: in a build script
+/// the latter describes the *host*, so a cross-compile would take the wrong
+/// branch (matching how the rpath above is emitted).
+fn stage_cblas_compat_lib(dest: &std::path::Path) {
+    if std::env::var("CARGO_CFG_TARGET_OS").as_deref() != Ok("linux") {
+        return;
+    }
+
+    use std::path::PathBuf;
+
+    // A library that exports CBLAS, in preference order. `libopenblas.so.0` is
+    // the runtime name on every distro that ships OpenBLAS apart from the
+    // alternatives-managed symlinks we explicitly avoid re-creating here.
+    let candidates: [&str; 4] = [
+        "/usr/lib/libopenblas.so.0",
+        "/usr/lib64/libopenblas.so.0",
+        "/usr/lib/x86_64-linux-gnu/libopenblas.so.0",
+        "/usr/lib/aarch64-linux-gnu/libopenblas.so.0",
+    ];
+
+    // Only act when libtranscribe actually imports a CBLAS symbol: rewriting
+    // libblas for a build that never calls it would be pointless churn, and the
+    // symlink would be the only reason a BLAS is pulled in at all.
+    let needs_cblas = std::fs::read_dir(dest)
+        .map(|entries| {
+            entries
+                .flatten()
+                .filter(|entry| {
+                    entry
+                        .file_name()
+                        .to_string_lossy()
+                        .starts_with("libtranscribe.so")
+                })
+                .any(|entry| elf_imports_symbol(&entry.path(), "cblas_"))
+        })
+        .unwrap_or(false);
+    if !needs_cblas {
+        return;
+    }
+
+    let Some(openblas) = candidates
+        .iter()
+        .map(PathBuf::from)
+        .find(|path| path.exists())
+    else {
+        println!(
+            "cargo:warning=libtranscribe imports CBLAS but no system OpenBLAS was \
+             found; transcription will fail at model load with \"undefined symbol: \
+             cblas_sgemm\". Install OpenBLAS (pacman -S openblas, dnf install \
+             openblas, apt install libopenblas0)."
+        );
+        return;
+    };
+
+    let link = dest.join("libblas.so.3");
+    let _ = std::fs::remove_file(&link);
+    if let Err(e) = std::os::unix::fs::symlink(&openblas, &link) {
+        println!(
+            "cargo:warning=failed to link {} -> {}: {e}",
+            link.display(),
+            openblas.display()
+        );
+        return;
+    }
+    println!(
+        "cargo:warning=Staged libblas.so.3 -> {} so libtranscribe's CBLAS symbols resolve",
+        openblas.display()
+    );
+}
+
+#[cfg(not(target_os = "linux"))]
+fn stage_cblas_compat_lib(_dest: &std::path::Path) {}
+
+/// Whether a shared library's dynamic symbol table references `needle`.
+///
+/// Cheap substring scan of the file: the goal is only to distinguish "this
+/// build imports CBLAS" from "it does not", and a false positive merely stages
+/// a harmless symlink.
+fn elf_imports_symbol(path: &std::path::Path, needle: &str) -> bool {
+    std::fs::read(path)
+        .map(|bytes| {
+            bytes
+                .windows(needle.len())
+                .any(|window| window == needle.as_bytes())
+        })
+        .unwrap_or(false)
 }
 
 /// Split a versioned ELF shared-library name into (stem, version depth):
