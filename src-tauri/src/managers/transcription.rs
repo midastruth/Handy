@@ -2058,6 +2058,21 @@ pub struct GpuDeviceOption {
 static GPU_DEVICES: OnceLock<Vec<GpuDeviceOption>> = OnceLock::new();
 
 fn transcribe_gpu_disabled_for_host() -> bool {
+    // `HANDY_DISABLE_GPU` forces every accelerator setting onto the CPU path.
+    //
+    // Needed because a GPU backend can register a device that is not actually
+    // usable, and ggml's Vulkan teardown then aborts the process on the
+    // half-initialised device. Intel Ivy Bridge (HD 4000) is the known case: the
+    // Vulkan device reports no 16-bit storage, model init correctly falls back to
+    // CPU, but `vkDestroyFence` during static destruction still calls abort() —
+    // taking the exit code with it and leaving a core dump behind. Forcing CPU
+    // keeps the broken device uninitialised, which is the only place the abort
+    // can originate. Same posture as the Windows-on-ARM64 case below: a host we
+    // know the GPU path is unsafe on is pinned to CPU rather than left to fail.
+    if crate::utils::env_flag_enabled("HANDY_DISABLE_GPU") {
+        return true;
+    }
+
     crate::utils::is_windows_x64_emulated_on_arm64()
 }
 
@@ -2207,6 +2222,53 @@ mod tests {
         for kind in ["metal", "cuda", "vulkan", "gpu", "unknown"] {
             assert!(!transcribe_device_allowed(kind, true));
         }
+    }
+
+    /// `HANDY_DISABLE_GPU` is read from the environment at call time, so the test
+    /// sets it, asserts, and removes it before returning. No other test reads or
+    /// writes this variable, so the process-global mutation cannot race.
+    #[test]
+    fn disable_gpu_env_flag_forces_cpu_and_ignores_the_setting() {
+        assert!(
+            !transcribe_gpu_disabled_for_host(),
+            "HANDY_DISABLE_GPU must be unset for the default case"
+        );
+
+        std::env::set_var("HANDY_DISABLE_GPU", "1");
+        assert!(transcribe_gpu_disabled_for_host());
+
+        // Every setting collapses onto the CPU backend, and the GPU devices are
+        // filtered out of the registry — the abort comes from *initialising* the
+        // broken device, so it must never be offered or selected.
+        for setting in [
+            TranscribeAcceleratorSetting::Auto,
+            TranscribeAcceleratorSetting::Cpu,
+            TranscribeAcceleratorSetting::Gpu,
+        ] {
+            assert_eq!(
+                effective_transcribe_accelerator(setting, transcribe_gpu_disabled_for_host()),
+                TranscribeAcceleratorSetting::Cpu
+            );
+            assert_eq!(
+                select_transcribe_backend_for_host(setting, true),
+                Backend::Cpu
+            );
+        }
+        assert_eq!(available_transcribe_accelerators(true), ["cpu"]);
+        for kind in ["metal", "cuda", "vulkan", "gpu"] {
+            assert!(!transcribe_device_allowed(kind, true));
+        }
+
+        for value in ["0", "false", "no", "off", ""] {
+            std::env::set_var("HANDY_DISABLE_GPU", value);
+            assert!(
+                !transcribe_gpu_disabled_for_host(),
+                "{value:?} should not disable the GPU"
+            );
+        }
+
+        std::env::remove_var("HANDY_DISABLE_GPU");
+        assert!(!transcribe_gpu_disabled_for_host());
     }
 
     #[test]
