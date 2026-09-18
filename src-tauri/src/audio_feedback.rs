@@ -19,6 +19,10 @@ fn resolve_sound_path(
     settings: &AppSettings,
     sound_type: SoundType,
 ) -> Option<PathBuf> {
+    let mut effective = settings.clone();
+    effective.sound_theme = effective_sound_theme(app, settings);
+    let settings = &effective;
+
     let sound_file = get_sound_path(settings, sound_type);
     let base_dir = get_sound_base_dir(settings);
     match base_dir {
@@ -43,6 +47,50 @@ fn get_sound_base_dir(settings: &AppSettings) -> tauri::path::BaseDirectory {
         SoundTheme::Custom => tauri::path::BaseDirectory::AppData,
         _ => tauri::path::BaseDirectory::Resource,
     }
+}
+
+/// Whether a saved custom sound file is actually on disk.
+///
+/// `check_custom_sounds` uses the same rule, so the UI and the playback path
+/// agree on when a custom theme is usable.
+pub fn custom_sound_exists(app: &AppHandle, sound_type: &str) -> bool {
+    crate::portable::resolve_app_data(app, &format!("custom_{}.wav", sound_type))
+        .is_ok_and(|path| path.exists())
+}
+
+/// A custom theme is only playable when *both* files are present.
+fn custom_theme_is_usable(app: &AppHandle) -> bool {
+    custom_sound_exists(app, "start") && custom_sound_exists(app, "stop")
+}
+
+/// Pure form of the theme fallback: a `Custom` theme is only usable when both
+/// files are present. Split out so the decision can be unit-tested without an
+/// `AppHandle`.
+fn resolve_effective_theme(theme: SoundTheme, custom_usable: bool) -> SoundTheme {
+    if theme == SoundTheme::Custom && !custom_usable {
+        SoundTheme::Marimba
+    } else {
+        theme
+    }
+}
+
+/// Resolve the theme to play. An unusable `Custom` theme (a file was deleted
+/// after it was selected) falls back to the default theme rather than playing
+/// nothing, and downgrades the persisted setting so the UI stops offering a
+/// preview that cannot work.
+fn effective_sound_theme(app: &AppHandle, settings: &AppSettings) -> SoundTheme {
+    let effective = resolve_effective_theme(settings.sound_theme, custom_theme_is_usable(app));
+    if effective == settings.sound_theme {
+        return effective;
+    }
+
+    warn!("Custom sound theme selected but custom_start.wav/custom_stop.wav are missing; falling back to the default theme");
+
+    let mut updated = settings.clone();
+    updated.sound_theme = effective;
+    settings::write_settings(app, updated);
+
+    effective
 }
 
 pub fn play_feedback_sound(app: &AppHandle, sound_type: SoundType) {
@@ -139,4 +187,35 @@ fn play_audio_file(
     sink.sleep_until_end();
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn custom_theme_is_kept_when_both_files_exist() {
+        assert_eq!(
+            resolve_effective_theme(SoundTheme::Custom, true),
+            SoundTheme::Custom
+        );
+    }
+
+    #[test]
+    fn custom_theme_falls_back_when_a_file_is_missing() {
+        // Regression: selecting Custom and then deleting the files used to leave
+        // the app silent forever with an ERROR per chime.
+        assert_eq!(
+            resolve_effective_theme(SoundTheme::Custom, false),
+            SoundTheme::Marimba
+        );
+    }
+
+    #[test]
+    fn builtin_themes_are_never_affected_by_custom_files() {
+        for theme in [SoundTheme::Marimba, SoundTheme::Pop] {
+            assert_eq!(resolve_effective_theme(theme, false), theme);
+            assert_eq!(resolve_effective_theme(theme, true), theme);
+        }
+    }
 }
