@@ -258,6 +258,16 @@ fn stage_transcribe_runtime_libs() {
         );
     }
     stage_cblas_compat_lib(&dest);
+    // The packaged copy in `dest` is not the only one the loader can pick. On a
+    // dev run (`cargo run`, `cargo tauri dev`) cargo puts the transcribe-cpp
+    // install dir itself on LD_LIBRARY_PATH, so `handy` loads libtranscribe from
+    // *there* — with libtranscribe's `$ORIGIN` pointing at that dir rather than
+    // at transcribe-libs/, which the call above just repaired. The same shim has
+    // to exist in the install dir or every dev run dies on the first model load
+    // (issue: `undefined symbol: cblas_sgemm` from the build tree's copy).
+    for dir in &dirs {
+        stage_cblas_compat_lib(dir);
+    }
     println!("cargo:warning=Staged {copied} transcribe-cpp runtime library file(s)");
 }
 
@@ -280,9 +290,10 @@ fn stage_transcribe_runtime_libs() {
 /// `libblas.so.3` symlink to the system OpenBLAS next to it repairs the lookup
 /// without touching the user's alternatives setup or the rest of the system.
 ///
-/// Linux-only, and a no-op when the system BLAS already provides CBLAS, when
-/// OpenBLAS is absent, or when `libtranscribe` has no CBLAS dependency at all
-/// (BLAS-off builds).
+/// Called for both the packaged staging dir and the transcribe-cpp install dir
+/// the loader uses on a dev run; Linux-only, and a no-op when the system BLAS
+/// already provides CBLAS, when OpenBLAS is absent, or when `libtranscribe` has
+/// no CBLAS dependency at all (BLAS-off builds).
 ///
 /// Gate on `CARGO_CFG_TARGET_OS` rather than `cfg(target_os)`: in a build script
 /// the latter describes the *host*, so a cross-compile would take the wrong
@@ -339,6 +350,12 @@ fn stage_cblas_compat_lib(dest: &std::path::Path) {
     };
 
     let link = dest.join("libblas.so.3");
+    // Idempotent: the caller declares the transcribe-cpp install dir as
+    // rerun-if-changed, so rewriting an already-correct link there would bump the
+    // directory mtime and re-run this script on every subsequent build.
+    if matches!(std::fs::read_link(&link), Ok(target) if target == openblas) {
+        return;
+    }
     let _ = std::fs::remove_file(&link);
     if let Err(e) = std::os::unix::fs::symlink(&openblas, &link) {
         println!(
