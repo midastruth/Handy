@@ -357,22 +357,40 @@ fn stage_cblas_compat_lib(dest: &std::path::Path) {
         return;
     }
     let _ = std::fs::remove_file(&link);
-    if let Err(e) = std::os::unix::fs::symlink(&openblas, &link) {
+    // Two independent axes are in play. `CARGO_CFG_TARGET_OS` is the *target*
+    // (checked above), while `cfg(unix)` here describes the *host* — build
+    // scripts are compiled for the host. So `std::os::unix` is only guaranteed
+    // to exist when the host is unix; a Windows host cross-compiling to Linux
+    // reaches this point with the symbol unavailable, which is a compile error
+    // unless it is gated.
+    #[cfg(not(unix))]
+    {
         println!(
-            "cargo:warning=failed to link {} -> {}: {e}",
+            "cargo:warning=cannot stage {} -> {}: creating symlinks on a {} host \
+             targeting linux is unsupported",
             link.display(),
-            openblas.display()
+            openblas.display(),
+            std::env::consts::OS
         );
         return;
     }
-    println!(
-        "cargo:warning=Staged libblas.so.3 -> {} so libtranscribe's CBLAS symbols resolve",
-        openblas.display()
-    );
-}
 
-#[cfg(not(target_os = "linux"))]
-fn stage_cblas_compat_lib(_dest: &std::path::Path) {}
+    #[cfg(unix)]
+    {
+        if let Err(e) = std::os::unix::fs::symlink(&openblas, &link) {
+            println!(
+                "cargo:warning=failed to link {} -> {}: {e}",
+                link.display(),
+                openblas.display()
+            );
+            return;
+        }
+        println!(
+            "cargo:warning=Staged libblas.so.3 -> {} so libtranscribe's CBLAS symbols resolve",
+            openblas.display()
+        );
+    }
+}
 
 /// Whether a shared library's dynamic symbol table references `needle`.
 ///

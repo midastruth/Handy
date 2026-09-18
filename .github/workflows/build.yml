@@ -225,7 +225,18 @@ jobs:
           APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
           KEYCHAIN_PASSWORD: ${{ secrets.KEYCHAIN_PASSWORD }}
         run: |
-          echo $APPLE_CERTIFICATE | base64 --decode > certificate.p12
+          set -euo pipefail
+          # `secrets` is not an available context in step-level `if`, so a
+          # missing secret cannot be filtered out declaratively. Fail with a
+          # clear message rather than letting `security import` reject an empty
+          # p12 ("One or more parameters passed to a function were not valid").
+          if [[ -z "${APPLE_CERTIFICATE:-}" ]]; then
+            echo "::error::sign-binaries is true but APPLE_CERTIFICATE is not set." >&2
+            echo "Set the Apple signing secrets, or build with sign-binaries: false" >&2
+            echo "(macOS then falls back to the ad-hoc 'signingIdentity: \"-\"')." >&2
+            exit 1
+          fi
+          echo "$APPLE_CERTIFICATE" | base64 --decode > certificate.p12
           security create-keychain -p "$KEYCHAIN_PASSWORD" build.keychain
           security default-keychain -s build.keychain
           security unlock-keychain -p "$KEYCHAIN_PASSWORD" build.keychain
@@ -512,22 +523,84 @@ jobs:
           chmod +x "$tools_dir/linuxdeploy-${arch}.AppImage"
           "$tools_dir/linuxdeploy-${arch}.AppImage" --appimage-extract-and-run --version
 
+      # Signing credentials are exported into $GITHUB_ENV rather than declared
+      # inline on the build step. A `${{ cond && secrets.X || '' }}` expression
+      # produces an *empty but set* environment variable (verified: both `null`
+      # and `''` yield a variable that `printenv` reports as present), and code
+      # that tests for presence then tries to consume the empty value instead of
+      # falling back:
+      #
+      #   * tauri-bundler's `keychain()` sees `APPLE_CERTIFICATE=Some("")` and
+      #     imports an empty p12 instead of using the configured ad-hoc identity
+      #   * the cert-import step runs `base64 -d` on "" and hands `security`
+      #     an empty keychain item ("One or more parameters ... not valid")
+      #
+      # Writing each variable only when it is non-empty leaves it genuinely
+      # unset, so a build with no Apple/Azure credentials still succeeds: macOS
+      # falls back to the ad-hoc `signingIdentity: "-"` in tauri.conf.json, and
+      # Windows produces an unsigned installer.
+      #
+      # `sign-binaries` still gates the *platform* credentials, preserving the
+      # upstream contract that a release fails loudly if its Apple/Azure secrets
+      # go missing. Updater artifact signing is deliberately independent of it:
+      # the updater key is what makes self-update work for fork builds, which are
+      # unsigned at the platform level.
+      - name: Export signing credentials
+        shell: bash
+        env:
+          SIGN_PLATFORM_BINARIES: ${{ inputs.sign-binaries }}
+          IN_TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          IN_TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          IN_APPLE_ID: ${{ secrets.APPLE_ID }}
+          IN_APPLE_ID_PASSWORD: ${{ secrets.APPLE_ID_PASSWORD }}
+          IN_APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          IN_APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          IN_APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          IN_APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          IN_AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          IN_AZURE_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
+          IN_AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+        run: |
+          set -euo pipefail
+
+          export_if_set() {
+            local name="$1" value="${2:-}"
+            if [[ -n "$value" ]]; then
+              # Values are newline-free (base64 keys, UUIDs), so the plain
+              # key=value form is safe and avoids needing a delimiter.
+              printf '%s=%s\n' "$name" "$value" >> "$GITHUB_ENV"
+              echo "$name: exported"
+            else
+              echo "$name: not configured, leaving unset"
+            fi
+          }
+
+          # Updater signing is required whenever the bundle config declares
+          # `createUpdaterArtifacts` and an updater pubkey, otherwise the bundler
+          # aborts with "A public key has been found, but no private key".
+          export_if_set TAURI_SIGNING_PRIVATE_KEY "$IN_TAURI_SIGNING_PRIVATE_KEY"
+          export_if_set TAURI_SIGNING_PRIVATE_KEY_PASSWORD "$IN_TAURI_SIGNING_PRIVATE_KEY_PASSWORD"
+
+          if [[ "$SIGN_PLATFORM_BINARIES" == "true" ]]; then
+            export_if_set APPLE_ID "$IN_APPLE_ID"
+            export_if_set APPLE_ID_PASSWORD "$IN_APPLE_ID_PASSWORD"
+            export_if_set APPLE_PASSWORD "$IN_APPLE_PASSWORD"
+            export_if_set APPLE_TEAM_ID "$IN_APPLE_TEAM_ID"
+            export_if_set APPLE_CERTIFICATE "$IN_APPLE_CERTIFICATE"
+            export_if_set APPLE_CERTIFICATE_PASSWORD "$IN_APPLE_CERTIFICATE_PASSWORD"
+            # Set by the `verify certificate` step above; read from the shell
+            # environment because GITHUB_ENV values are not guaranteed to be
+            # visible through the `env` expression context.
+            export_if_set APPLE_SIGNING_IDENTITY "${CERT_ID:-}"
+            export_if_set AZURE_CLIENT_ID "$IN_AZURE_CLIENT_ID"
+            export_if_set AZURE_CLIENT_SECRET "$IN_AZURE_CLIENT_SECRET"
+            export_if_set AZURE_TENANT_ID "$IN_AZURE_TENANT_ID"
+          fi
+
       - name: Build with Tauri
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          APPLE_ID: ${{ inputs.sign-binaries && secrets.APPLE_ID || '' }}
-          APPLE_ID_PASSWORD: ${{ inputs.sign-binaries && secrets.APPLE_ID_PASSWORD || '' }}
-          APPLE_PASSWORD: ${{ inputs.sign-binaries && secrets.APPLE_PASSWORD || '' }}
-          APPLE_TEAM_ID: ${{ inputs.sign-binaries && secrets.APPLE_TEAM_ID || '' }}
-          APPLE_CERTIFICATE: ${{ inputs.sign-binaries && secrets.APPLE_CERTIFICATE || '' }}
-          APPLE_CERTIFICATE_PASSWORD: ${{ inputs.sign-binaries && secrets.APPLE_CERTIFICATE_PASSWORD || '' }}
-          APPLE_SIGNING_IDENTITY: ${{ inputs.sign-binaries && env.CERT_ID || '' }}
-          AZURE_CLIENT_ID: ${{ inputs.sign-binaries && secrets.AZURE_CLIENT_ID || '' }}
-          AZURE_CLIENT_SECRET: ${{ inputs.sign-binaries && secrets.AZURE_CLIENT_SECRET || '' }}
-          AZURE_TENANT_ID: ${{ inputs.sign-binaries && secrets.AZURE_TENANT_ID || '' }}
-          TAURI_SIGNING_PRIVATE_KEY: ${{ inputs.sign-binaries && secrets.TAURI_SIGNING_PRIVATE_KEY || '' }}
-          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ inputs.sign-binaries && secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD || '' }}
           # The Vulkan loader and Wayland client library must come from the host
           # graphics stack. Bundling Ubuntu's copies ahead of the system libraries can
           # prevent a newer distro's Vulkan ICD or Mesa stack from loading.

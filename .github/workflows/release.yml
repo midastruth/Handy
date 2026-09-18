@@ -73,7 +73,12 @@ jobs:
       platform: ${{ matrix.platform }}
       target: ${{ matrix.target }}
       build-args: ${{ matrix.args }}
-      sign-binaries: true
+      # This fork has no Apple Developer ID or Azure Trusted Signing account, so
+      # platform-level code signing is off: macOS is ad-hoc signed via
+      # `signingIdentity: "-"` and Windows ships an unsigned installer. Updater
+      # artifacts are still signed (that is driven by TAURI_SIGNING_PRIVATE_KEY,
+      # not by this flag) so in-app self-update keeps working.
+      sign-binaries: false
       asset-prefix: "handy"
       upload-artifacts: false
       release-id: ${{ needs.create-release.outputs.release-id }}

@@ -48,5 +48,7 @@ jobs:
       target: ${{ matrix.target }}
       build-args: ${{ matrix.args }}
       upload-artifacts: true
-      sign-binaries: true
+      # Unsigned platform binaries (no Apple/Azure credentials in this fork);
+      # updater artifacts are still signed so self-update keeps working.
+      sign-binaries: false
     secrets: inherit
